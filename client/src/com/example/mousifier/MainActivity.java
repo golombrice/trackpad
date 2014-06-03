@@ -155,6 +155,8 @@ public class MainActivity extends Activity {
 
 	private int mDownX;
 	private int mDownY;
+	private int mDownXsec;
+	private int mDownYsec;
 	private final int SCROLL_THRESHOLD = 10;
 	private boolean isOnClick;
 	private boolean secondFingerDown = false;
@@ -162,10 +164,37 @@ public class MainActivity extends Activity {
 
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
-		int moveX = mDownX-(int)ev.getX();
-		int moveY = mDownY-(int)ev.getY();
-		mDownX = (int)ev.getX();
-		mDownY = (int)ev.getY();
+
+		int moveX = 0;
+		int moveY = 0;
+		int moveYsec = 0;
+		int moveXsec = 0;
+		int pointerCount = ev.getPointerCount();
+        for(int i = 0; i < pointerCount; ++i)
+        {
+            int pointerIndex = i;
+            int pointerId = ev.getPointerId(pointerIndex);
+            Log.d("pointer id - move",Integer.toString(pointerId));
+            if(pointerId == 0)
+            {
+//                fingerOneDown = 1;
+            	moveX = mDownX-(int)ev.getX(pointerIndex);
+        		moveY = mDownY-(int)ev.getY(pointerIndex);
+        		mDownX = (int)ev.getX(pointerIndex);
+        		mDownY = (int)ev.getY(pointerIndex);
+            }
+            if(pointerId == 1)
+            {
+//              fingerTwoDown = 1;
+        		moveXsec = mDownXsec-(int)ev.getX(pointerIndex);
+        		moveYsec = mDownYsec-(int)ev.getY(pointerIndex);
+        		mDownXsec = (int)ev.getX(pointerIndex);
+        		mDownYsec = (int)ev.getY(pointerIndex);
+				Log.d("sec", Float.toString( ev.getX(pointerIndex))+" "+ Float.toString(ev.getY(pointerIndex)));
+
+            }
+        }
+		
 
 		switch (ev.getAction() & MotionEvent.ACTION_MASK) {
 		case MotionEvent.ACTION_DOWN:
@@ -183,29 +212,9 @@ public class MainActivity extends Activity {
 			}
 			break;
 		case MotionEvent.ACTION_MOVE:
+		
 			if(mBound) {
 				if( secondFingerDown ) {
-					int pointerCount = ev.getPointerCount();
-			        for(int i = 0; i < pointerCount; ++i)
-			        {
-			            int pointerIndex = i;
-			            int pointerId = ev.getPointerId(pointerIndex);
-			            Log.d("pointer id - move",Integer.toString(pointerId));
-//			            if(pointerId == 0)
-//			            {
-//			                fingerOneDown = 1;
-//			                fingerOneX = ev.getX(pointerIndex);
-//			                fingerOneY = ev.getY(pointerIndex);
-//			            }
-			            if(pointerId == 1)
-			            {
-//			                fingerTwoDown = 1;
-//			                fingerTwoX =;
-//			                fingerTwoY = ;
-							Log.d("sec", Float.toString( ev.getX(pointerIndex))+" "+ Float.toString(ev.getY(pointerIndex)));
-
-			            }
-			        }
 					mService.sendScroll(moveX,moveY);
 				}
 				else {
