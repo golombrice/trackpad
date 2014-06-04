@@ -3,8 +3,6 @@ package com.example.mousifier;
 import com.example.mousifier.UDPservice.LocalBinder;
 
 import android.app.Activity;
-import android.app.ActionBar;
-import android.app.Fragment;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -13,24 +11,32 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
-import android.view.KeyEvent;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.TextView;
-import android.os.Build;
 
 public class MainActivity extends Activity {
-	UDPservice mService;
-	boolean mBound = false;
+	private final int SCROLL_THRESHOLD = 10;
+	private final int MOVE_THRESHOLD = 5;
+	private final int CLICK_TIME_THRESHOLD = 200;
+	private final String TBNAME = "Keyboard";
+
+	UDPservice serverService_;
+	boolean serverBound_ = false;
+
+	private int[] fingerPosX_ = new int[2];
+	private int[] fingerPosY_ = new int[2];
+
+
+	private boolean isMovingWindow_ = false;
+	private boolean isOnClick_;
+	private boolean secondFingerDownWhileOnClick_ = false;
+	private boolean secondFingerDown_ = false;
+	private long startTime_ = System.currentTimeMillis();
 
 	/** Defines callbacks for service binding, passed to bindService() */
 	private ServiceConnection mConnection = new ServiceConnection() {
@@ -40,14 +46,13 @@ public class MainActivity extends Activity {
 				IBinder service) {
 			// We've bound to LocalService, cast the IBinder and get LocalService instance
 			LocalBinder binder = (LocalBinder) service;
-			mService = binder.getService();
-			mBound = true;
-
+			serverService_ = binder.getService();
+			serverBound_ = true;
 		}
 
 		@Override
 		public void onServiceDisconnected(ComponentName arg0) {
-			mBound = false;
+			serverBound_ = false;
 		}
 	};
 
@@ -55,71 +60,151 @@ public class MainActivity extends Activity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
-		Log.d("fds", "fdsasdd");
 
-//		if (savedInstanceState == null) {
-//			getFragmentManager().beginTransaction()
-//			.add(R.id.container, new PlaceholderFragment())
-//			.commit();
-//		}
 		Intent intent = new Intent(this, UDPservice.class);
-		//        startService(intent);
 		bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
-		Log.d("fds", "kakka");
-		
+
 		final Button button = (Button) findViewById(R.id.kb_button);
 		button.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
+				// Show soft keyboard
 				EditText txtName = (EditText) findViewById(R.id.txtName);
 				InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-				// only will trigger it if no physical keyboard is open
 				inputMethodManager.showSoftInput(txtName, InputMethodManager.SHOW_IMPLICIT);
 			}
 		});
 		final EditText txtBox = (EditText) findViewById(R.id.txtName);
-//		txtBox.addTextChangedListener(new TextWatcher(){
-//			@Override
-//	        public void beforeTextChanged(CharSequence s, int start, int count, int after){
-//				
-//			}
-//			@Override
-//			public void onTextChanged(CharSequence s, int start, int before, int count){
-//				String saveString = s.toString();
-//				if(s.length() != 0 ) {
-//					txtBox.setText("");
-//				}
-//				Log.d("fds", saveString);
-//	        }
-//			@Override
-//			public void afterTextChanged(Editable arg0) {
-//				// TODO Auto-generated method stub
-//				
-//			}
-//	    }); 
-		
-		txtBox.setOnEditorActionListener(new EditText.OnEditorActionListener() {
+		txtBox.setText(TBNAME);
+		txtBox.setSelection(TBNAME.length());
+
+		// A listener is added to the EditText. This implements the keyboard feature of the program.
+		// Whenever the text is changed, we take the added letter and send it further to the server.
+		txtBox.addTextChangedListener(new TextWatcher(){
 			@Override
-			public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-			 if (actionId == EditorInfo.IME_ACTION_DONE) {
-			 	mService.sendText(v.getText().toString());
-			 	v.setText("");
-			 	return true;
-			 }
-			 return false;
+			public void beforeTextChanged(CharSequence s, int start, int count, int after){
+			}
+			@Override
+			public void onTextChanged(CharSequence s, int start, int before, int count){
+				if(s.length() == TBNAME.length()) {
+					return;
+				}
+
+				String saveString = s.toString();
+				char sendchar = 0;
+				if(s.length() == TBNAME.length()-1 ) {
+					// backspace
+					sendchar = (char)8;
+				}
+				if(s.length() > TBNAME.length() ) { // something else than backspace
+					sendchar = saveString.charAt(TBNAME.length());
+				}
+				// set the default text to TextEdit
+				txtBox.setText(TBNAME); 
+				txtBox.setSelection(TBNAME.length());
+
+//				Log.d("txt", start + " " + before + " " + count + " " + saveString);
+				if( serverBound_ ) {
+					serverService_.sendChar(sendchar);
+				}
+			}
+			@Override
+			public void afterTextChanged(Editable arg0) {				
+			}
+		}); 
+	}
+
+	// This function implements the listening of cursor events on the screen. Most important function in this activity.
+	@Override
+	public boolean onTouchEvent(MotionEvent ev) {
+		// We are here because a finger moved on screen.
+		
+		// Lets find the new positions and movement for first and second fingers.
+		int[] moveX = new int[2];
+		int[] moveY = new int[2];
+		int pointerCount = ev.getPointerCount();
+		for(int pointerIndex = 0; pointerIndex < pointerCount; ++pointerIndex)
+		{
+			int pointerId = ev.getPointerId(pointerIndex);
+			if( pointerId == 0 || pointerId == 1 )
+			{
+				moveX[pointerId] = fingerPosX_[pointerId]-(int)ev.getX(pointerIndex);
+				moveY[pointerId] = fingerPosY_[pointerId]-(int)ev.getY(pointerIndex);
+				fingerPosX_[pointerId] = (int)ev.getX(pointerIndex);
+				fingerPosY_[pointerId] = (int)ev.getY(pointerIndex);
+			}
+		}
+
+		// Act depending on what type of action happened.
+		switch (ev.getAction() & MotionEvent.ACTION_MASK) {
+		case MotionEvent.ACTION_DOWN: // first finger down
+			startTime_ = System.currentTimeMillis();
+			isOnClick_ = true;
+			break;
+		case MotionEvent.ACTION_UP: // first finger up
+			if (isOnClick_) {
+				long elapsedTime = System.currentTimeMillis()-startTime_;
+				if(elapsedTime < CLICK_TIME_THRESHOLD) {
+					if( secondFingerDownWhileOnClick_ ) {
+						serverService_.sendSecClick();
+					} else {
+						serverService_.sendClick();
+					}
+				}
+			}
+			isOnClick_ = false;
+			secondFingerDownWhileOnClick_ = false;
+			break;
+		case MotionEvent.ACTION_POINTER_DOWN: // second finger down
+			secondFingerDown_ = true;
+			if( isOnClick_ ) {
+				secondFingerDownWhileOnClick_ = true;
+			}
+			break;
+		case MotionEvent.ACTION_POINTER_UP: // second finger up
+			if( isMovingWindow_ ) {
+				isMovingWindow_ = false;
+				serverService_.sendButtonup();
+			}
+			secondFingerDown_ = false;
+			break;
+		case MotionEvent.ACTION_MOVE: // first or second finger moved
+			if(serverBound_) {
+				// both fingers moved as much
+				if( secondFingerDown_ && Math.abs(moveX[0]-moveX[1]) < MOVE_THRESHOLD && Math.abs(moveY[0]-moveY[1]) < MOVE_THRESHOLD ) {
+					serverService_.sendScroll(moveX[0],moveY[0]);
+				}
+				// we are currently moving a window
+				if( isMovingWindow_ ){
+					serverService_.sendMove(moveX[1],moveY[1]);
+				}
+				// let's start moving a window because one finger stays still and another moves
+				if( !isMovingWindow_ && secondFingerDown_ && !(Math.abs(moveX[0]-moveX[1]) < MOVE_THRESHOLD && Math.abs(moveY[0]-moveY[1]) < MOVE_THRESHOLD ) ){
+					isMovingWindow_ = true;
+					serverService_.sendButtondown();
+					serverService_.sendMove(moveX[1],moveY[1]);
+				}
+				// only one finger moving so just move cursor
+				if( !secondFingerDown_ ) {
+					serverService_.sendMove(moveX[0],moveY[0]);
+				}
 			}
 
-			});
-	}
-	
-	@Override
-	public boolean dispatchKeyEvent(KeyEvent event) {
-	    Log.i("key pressed", String.valueOf(event.getKeyCode()));
-	    return super.dispatchKeyEvent(event);
+			// the first finger moved so much that we are not simply clicking on the screen but rather moving
+			if (isOnClick_ && (Math.abs(moveX[0]) > SCROLL_THRESHOLD || Math.abs(moveY[0]) > SCROLL_THRESHOLD)) {
+				isOnClick_ = false;
+				
+			}
+			break;
+		case MotionEvent.ACTION_CANCEL:
+			break;
+		default:
+			break;
+		}
+		return true;
 	}
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
-
 		// Inflate the menu; this adds items to the action bar if it is present.
 		getMenuInflater().inflate(R.menu.main, menu);
 		return true;
@@ -132,142 +217,12 @@ public class MainActivity extends Activity {
 		// as you specify a parent activity in AndroidManifest.xml.
 		int id = item.getItemId();
 		if (id == R.id.action_settings) {
+		    Intent intent = new Intent(this, SettingsActivity.class);
+		    startActivity(intent);
 			return true;
 		}
 		return super.onOptionsItemSelected(item);
 	}
 
-	/**
-	 * A placeholder fragment containing a simple view.
-	 */
-	public static class PlaceholderFragment extends Fragment {
-
-		public PlaceholderFragment() {
-		}
-
-		@Override
-		public View onCreateView(LayoutInflater inflater, ViewGroup container,
-				Bundle savedInstanceState) {
-			View rootView = inflater.inflate(R.layout.fragment_main, container, false);
-			return rootView;
-		}
-	}
-
-	private int mDownX;
-	private int mDownY;
-	private int mDownXsec;
-	private int mDownYsec;
-	private final int SCROLL_THRESHOLD = 10;
-	private boolean isOnClick;
-	private boolean secondFingerDown = false;
-	private long startTime = System.currentTimeMillis();
-
-	@Override
-	public boolean onTouchEvent(MotionEvent ev) {
-
-		int moveX = 0;
-		int moveY = 0;
-		int moveYsec = 0;
-		int moveXsec = 0;
-		int pointerCount = ev.getPointerCount();
-        for(int i = 0; i < pointerCount; ++i)
-        {
-            int pointerIndex = i;
-            int pointerId = ev.getPointerId(pointerIndex);
-            Log.d("pointer id - move",Integer.toString(pointerId));
-            if(pointerId == 0)
-            {
-//                fingerOneDown = 1;
-            	moveX = mDownX-(int)ev.getX(pointerIndex);
-        		moveY = mDownY-(int)ev.getY(pointerIndex);
-        		mDownX = (int)ev.getX(pointerIndex);
-        		mDownY = (int)ev.getY(pointerIndex);
-            }
-            if(pointerId == 1)
-            {
-//              fingerTwoDown = 1;
-        		moveXsec = mDownXsec-(int)ev.getX(pointerIndex);
-        		moveYsec = mDownYsec-(int)ev.getY(pointerIndex);
-        		mDownXsec = (int)ev.getX(pointerIndex);
-        		mDownYsec = (int)ev.getY(pointerIndex);
-				Log.d("sec", Float.toString( ev.getX(pointerIndex))+" "+ Float.toString(ev.getY(pointerIndex)));
-
-            }
-        }
-		
-
-		switch (ev.getAction() & MotionEvent.ACTION_MASK) {
-		case MotionEvent.ACTION_DOWN:
-			startTime = System.currentTimeMillis();
-			isOnClick = true;
-			break;
-		case MotionEvent.ACTION_CANCEL:
-		case MotionEvent.ACTION_UP:
-			if (isOnClick) {
-				Log.i("fds", "onClick ");
-				long elapsedTime = System.currentTimeMillis()-startTime;
-				if(elapsedTime < 200) {
-					mService.sendClick();
-				}
-			}
-			break;
-		case MotionEvent.ACTION_MOVE:
-		
-			if(mBound) {
-				if( secondFingerDown ) {
-					mService.sendScroll(moveX,moveY);
-				}
-				else {
-					mService.sendUDPPacket(moveX,moveY);
-				}
-			}
-
-			if (isOnClick && (Math.abs(moveX) > SCROLL_THRESHOLD || Math.abs(moveY) > SCROLL_THRESHOLD)) {
-				Log.i("few", "movement detected");
-				isOnClick = false;
-			}
-			break;
-		case MotionEvent.ACTION_POINTER_DOWN:
-			Log.i("few", "finger down");
-			secondFingerDown = true;
-			break;
-		case MotionEvent.ACTION_POINTER_UP:
-			Log.i("few", "finger up");
-			secondFingerDown = false;
-			break;
-		default:
-			break;
-		}
-
-
-		//    	int x = (int)event.getX();
-		//    	Log.d("onTouch", Integer.toString(x));
-		//    	int y = (int)event.getY();
-		//    	Log.d("onTouch", Integer.toString(y));
-
-
-
-		return true;
-	}
-
-
-	//    @Override
-	//    public boolean onTouchEvent(MotionEvent event) {
-	//    	int x = (int)event.getX();
-	//    	Log.d("onTouch", Integer.toString(x));
-	//    	int y = (int)event.getY();
-	//    	Log.d("onTouch", Integer.toString(y));
-	//    	
-	//    	if(mBound) {
-	//    		mService.sendUDPPacket(x,y);
-	//    	}
-	//
-	//    	//        switch (event.getAction()) {
-	//    	//            case MotionEvent.ACTION_DOWN:
-	//    	//            case MotionEvent.ACTION_MOVE:
-	//    	//            case MotionEvent.ACTION_UP:
-	//    	//        }
-	//    	return false;
-	//    }
 
 }
