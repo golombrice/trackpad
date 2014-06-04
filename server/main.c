@@ -1,6 +1,18 @@
-#include<stdio.h> //printf
-#include<string.h> //memset
-#include<stdlib.h> //exit(0);
+/*
+The server for 'Mouse for Linux'.
+
+Receives UDP packets from the client and processes the simple commands 
+in order to operate on the mouse or keyboard on top of X11.
+Uses xdotool to implement the mouse/keyboard operation. 
+See COPYRIGHT_xdo and http://www.semicomplete.com/projects/xdotool/ for details.
+
+04.06.2014
+Petri Helin
+http://www.cs.tut.fi/~helinp/android-trackpad.shtml
+*/
+#include<stdio.h> 
+#include<string.h>
+#include<stdlib.h> 
 #include<arpa/inet.h>
 #include<sys/socket.h>
 #include <X11/Xlib.h>
@@ -14,6 +26,7 @@ void process_command(char* pch, xdo_t* xdo);
 int main(int argc, char** argv)
 {
 
+   // parse input arguments
    int verbose = 0;
    int port = 32000;
    int c = 0;
@@ -40,8 +53,7 @@ int main(int argc, char** argv)
       }
    }
 
-
-
+   // create a UDP socket
    struct sockaddr_in si_me;
    struct sockaddr_in si_other;
 
@@ -50,27 +62,26 @@ int main(int argc, char** argv)
    int recv_len = 0;
    char buf[BUFLEN];
 
-   //create a UDP socket
    if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
    {
       perror("Socket connection failed.");
       return 1;
    }
 
-   // zero out the structure
    memset((char *) &si_me, 0, sizeof(si_me));
 
    si_me.sin_family = AF_INET;
    si_me.sin_port = htons(port);
    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 
-   //bind socket to port
-   if( bind(s , (struct sockaddr*)&si_me, sizeof(si_me) ) == -1)
+   // bind socket to port
+   if( bind(s, (struct sockaddr*)&si_me, sizeof(si_me) ) == -1)
    {
       perror("Binding to port failed.");
       return 1;
    }
 
+   // create a object for controlling x events
    xdo_t* xdo = xdo_new(NULL);
 
    //keep listening for data
@@ -149,7 +160,6 @@ void process_command(char* pch, xdo_t* xdo) {
    if(strcmp(pch, "text") == 0 ) {
       if( pch != NULL ) {
          pch = strtok(NULL, " ");
-         //xdo_(xdo, -x, -y);
          xdo_type(xdo, CURRENTWINDOW, pch, 12000);
          xdo_keysequence(xdo, CURRENTWINDOW, "Return", 12000);
       }
@@ -157,7 +167,6 @@ void process_command(char* pch, xdo_t* xdo) {
    if(strcmp(pch, "char") == 0 ) {
       if( pch != NULL ) {
          pch = pch+5;
-         //xdo_(xdo, -x, -y);
          if( pch[0] == 8) {
             xdo_keysequence(xdo, CURRENTWINDOW, "BackSpace", 12000);
          }
