@@ -17,7 +17,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.preference.PreferenceManager;
-import android.util.Log;
 
 public class UDPservice extends Service {
 

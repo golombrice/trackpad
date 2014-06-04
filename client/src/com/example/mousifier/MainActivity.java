@@ -3,12 +3,15 @@ package com.example.mousifier;
 import com.example.mousifier.UDPservice.LocalBinder;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Menu;
@@ -111,6 +114,15 @@ public class MainActivity extends Activity {
 			public void afterTextChanged(Editable arg0) {				
 			}
 		}); 
+		
+		SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(this);
+		String serverAddress = sharedPref.getString("server_addr", "");
+		if( serverAddress.equals(getResources().getText(R.string.default_address))) {
+			AlertDialog alertDialog = new AlertDialog.Builder(this).create();
+			alertDialog.setTitle("Welcome!");
+			alertDialog.setMessage("It seems that the server address is empty. Please set a server address and port using Settings.");
+			alertDialog.show();
+		}
 	}
 
 	// This function implements the listening of cursor events on the screen. Most important function in this activity.
@@ -192,7 +204,6 @@ public class MainActivity extends Activity {
 			// the first finger moved so much that we are not simply clicking on the screen but rather moving
 			if (isOnClick_ && (Math.abs(moveX[0]) > SCROLL_THRESHOLD || Math.abs(moveY[0]) > SCROLL_THRESHOLD)) {
 				isOnClick_ = false;
-				
 			}
 			break;
 		case MotionEvent.ACTION_CANCEL:
