@@ -21,12 +21,13 @@ import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 
 public class MainActivity extends Activity {
 	private final int SCROLL_THRESHOLD = 10;
 	private final int MOVE_THRESHOLD = 5;
 	private final int CLICK_TIME_THRESHOLD = 200;
-	private final String TBNAME = "Keyboard";
+	private final String TBNAME = "Keyboard ";
 
 	UDPservice serverService_;
 	boolean serverBound_ = false;
@@ -67,7 +68,7 @@ public class MainActivity extends Activity {
 		Intent intent = new Intent(this, UDPservice.class);
 		bindService(intent, mConnection, Context.BIND_AUTO_CREATE);
 
-		final Button button = (Button) findViewById(R.id.kb_button);
+		final ImageButton button = (ImageButton) findViewById(R.id.kb_button);
 		button.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
 				// Show soft keyboard
@@ -120,7 +121,7 @@ public class MainActivity extends Activity {
 		if( serverAddress.equals(getResources().getText(R.string.default_address))) {
 			AlertDialog alertDialog = new AlertDialog.Builder(this).create();
 			alertDialog.setTitle("Welcome!");
-			alertDialog.setMessage("It seems that the server address is empty. Please set a server address and port using Settings.");
+			alertDialog.setMessage("This app allows you to control a Linux computer using your phone as mouse and keyboard. Before you begin, you need to set up the server program in your computer. See http://www.cs.tut.fi/~helinp/android-trackpad.shtml for details. Once the server is set up, you can set the server address and port using Settings.");
 			alertDialog.show();
 		}
 	}

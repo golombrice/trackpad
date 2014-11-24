@@ -19,14 +19,13 @@
         android:textSize="0px"
         android:background="#00000000" />
 
-    <Button
+    <ImageButton
         android:id="@+id/kb_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
-        android:text="Show keyboard"
-        android:textColor="@color/white"
-        android:textSize="8pt" />
+        android:src="@drawable/keyboard"
+         />
 
 </RelativeLayout>
